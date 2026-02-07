@@ -1,0 +1,1494 @@
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+СТРУКТУРА НА ПРОЕКТА
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+hair-salon-website/
+├── package.json
+├── server.js
+├── public/
+│   ├── index.html
+│   ├── style.css
+│   ├── script.js
+│   └── admin/
+│       ├── login.html
+│       ├── dashboard.html
+│       └── admin.js
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+Пълен SQL за създаване на всички таблици с правилни данни:
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+CREATE DATABASE IF NOT EXISTS hair_salon;
+USE hair_salon;
+
+CREATE TABLE IF NOT EXISTS services (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    duration INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS appointments (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_name VARCHAR(100) NOT NULL,
+    customer_phone VARCHAR(20) NOT NULL,
+    service_id INT NOT NULL,
+    appointment_date DATETIME NOT NULL,
+    status ENUM('pending', 'confirmed', 'cancelled', 'completed') DEFAULT 'pending',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_appointments_service FOREIGN KEY (service_id)
+        REFERENCES services(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS working_hours (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    day_of_week INT,
+    opening_time TIME,
+    closing_time TIME
+);
+
+CREATE TABLE IF NOT EXISTS admins (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    email VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS contacts (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('new', 'read', 'replied') DEFAULT 'new',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_name VARCHAR(100) NOT NULL,
+    rating INT CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT,
+    approved BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO services (name, price, duration) VALUES
+('Мъжко подстригване', 15.00, 30),
+('Дамско прическа', 25.00, 60),
+('Боядисване', 50.00, 120),
+('Детско подстригване', 12.00, 30);
+
+INSERT INTO appointments (customer_name, customer_phone, service_id, appointment_date, status) VALUES
+('Иван Петров', '0891528211', 1, '2026-05-15 10:00:00', 'confirmed'),
+('Мария Иванова', '0891944542', 2, '2026-04-07 14:35:00', 'completed'),
+('Георги Димитров', '0895554259', 4, '2026-06-10 11:00:00', 'pending'),
+('Елена Стоянова', '0898674221', 3, '2026-06-03 14:30:00', 'confirmed');
+
+INSERT INTO working_hours (day_of_week, opening_time, closing_time) VALUES
+(1, '09:00', '18:00'),
+(2, '09:00', '18:00'),
+(3, '09:00', '18:00'),
+(4, '09:00', '18:00'),
+(5, '09:00', '18:00'),
+(6, '10:00', '16:00');
+
+INSERT INTO admins (username, password_hash, email) 
+VALUES ('admin', '$2b$10$U.meyKv7Y9AIVgi9XG5uaudKU88yDUObyWufe.6nNhs9XTc2jErjq', 'admin@salon.com');
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+package.json
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+{
+  "name": "hair-salon-website",
+  "version": "1.0.0",
+  "description": "Уеб сайт за фризьорски салон",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql": "^2.18.1",
+    "express-session": "^1.17.3",
+    "bcrypt": "^5.1.1"
+  }
+}
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+server.js (основен сървърен файл)
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+const express = require('express');
+const mysql = require('mysql');
+const path = require('path');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
+const app = express();
+app.disable('x-powered-by');
+const PORT = 3000;
+
+const db = mysql.createPool({
+    connectionLimit: 10,
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'hair_salon'
+});
+
+db.getConnection((err, connection) => {
+    if (err) {
+        console.error('ГРЕШКА: не може да се свърже с MySQL:', err.message);
+    } else {
+        console.log('Свързан с MySQL базата данни (pool)');
+        connection.release();
+    }
+});
+
+app.use(express.static('public'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(session({
+    secret: 'salon-secret-key-2024',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        secure: false,
+        maxAge: 24 * 60 * 60 * 1000
+    }
+}));
+
+const requireAdmin = (req, res, next) => {
+    if (req.session && req.session.isAdmin) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Неоторизиран достъп' });
+};
+
+function handleDbError(res, err, context = '') {
+    console.error('DB ERROR', context, err);
+   
+    return res.status(500).json({ error: 'Вътрешна грешка в сървъра' });
+}
+
+app.get('/api/services', (req, res) => {
+    db.query('SELECT * FROM services', (err, results) => {
+        if (err) return handleDbError(res, err, '/api/services');
+        res.json(results);
+    });
+});
+
+app.get('/api/working-hours', (req, res) => {
+    db.query('SELECT * FROM working_hours ORDER BY day_of_week', (err, results) => {
+        if (err) return handleDbError(res, err, '/api/working-hours');
+        res.json(results);
+    });
+});
+
+app.post('/api/appointments', (req, res) => {
+    const { name, phone, service_id, date } = req.body;
+
+    if (!name || !phone || !service_id || !date) {
+        return res.status(400).json({ error: 'Липсващо задължително поле' });
+    }
+
+    const appointment = {
+        customer_name: name,
+        customer_phone: phone,
+        service_id: service_id,
+        appointment_date: date
+    };
+    
+    db.query('INSERT INTO appointments SET ?', appointment, (err, result) => {
+        if (err) return handleDbError(res, err, '/api/appointments - INSERT');
+        res.json({ success: true, id: result.insertId });
+    });
+});
+
+app.post('/api/contacts', (req, res) => {
+    const { name, email, message } = req.body;
+    if (!name || !email || !message) {
+        return res.status(400).json({ error: 'Липсващо задължително поле' });
+    }
+    const sql = 'INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)';
+    db.query(sql, [name, email, message], (err, result) => {
+        if (err) return handleDbError(res, err, '/api/contacts - INSERT');
+        res.json({ success: true, id: result.insertId });
+    });
+});
+
+app.post('/api/reviews', (req, res) => {
+    const { customer_name, rating, comment } = req.body;
+    if (!customer_name || !rating) {
+        return res.status(400).json({ error: 'Липсващо задължително поле' });
+    }
+    const sql = 'INSERT INTO reviews (customer_name, rating, comment) VALUES (?, ?, ?)';
+    db.query(sql, [customer_name, rating, comment], (err, result) => {
+        if (err) return handleDbError(res, err, '/api/reviews - INSERT');
+        res.json({ success: true, id: result.insertId });
+    });
+});
+
+app.get('/api/reviews/approved', (req, res) => {
+    const sql = 'SELECT * FROM reviews WHERE approved = TRUE ORDER BY created_at DESC';
+    db.query(sql, (err, results) => {
+        if (err) return handleDbError(res, err, '/api/reviews/approved');
+        res.json(results);
+    });
+});
+
+app.post('/api/admin/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Липсва потребителско име или парола' });
+    }
+    
+    const sql = 'SELECT * FROM admins WHERE username = ?';
+    db.query(sql, [username], async (err, results) => {
+        if (err) return handleDbError(res, err, '/api/admin/login - SELECT');
+        
+        if (results.length === 0) {
+            return res.status(401).json({ error: 'Грешно потребителско име или парола' });
+        }
+        
+        const admin = results[0];
+        try {
+            const validPassword = await bcrypt.compare(password, admin.password_hash);
+            if (validPassword) {
+                req.session.isAdmin = true;
+                req.session.adminId = admin.id;
+                req.session.adminUsername = admin.username;
+                return res.json({ success: true, username: admin.username });
+            } else {
+                return res.status(401).json({ error: 'Грешно потребителско име или парола' });
+            }
+        } catch (compareErr) {
+            console.error('bcrypt error', compareErr);
+            return res.status(500).json({ error: 'Вътрешна грешка' });
+        }
+    });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Session destroy error', err);
+            return res.status(500).json({ error: 'Неуспешен изход' });
+        }
+        res.json({ success: true });
+    });
+});
+
+app.get('/api/admin/check', (req, res) => {
+    res.json({ isAdmin: !!req.session.isAdmin });
+});
+
+app.get('/api/admin/appointments', requireAdmin, (req, res) => {
+    const sql = `
+        SELECT a.*, s.name as service_name 
+        FROM appointments a 
+        LEFT JOIN services s ON a.service_id = s.id 
+        ORDER BY a.appointment_date DESC
+    `;
+    db.query(sql, (err, results) => {
+        if (err) return handleDbError(res, err, '/api/admin/appointments');
+        res.json(results);
+    });
+});
+
+app.put('/api/admin/appointments/:id', requireAdmin, (req, res) => {
+    const { status, notes } = req.body;
+    const sql = 'UPDATE appointments SET status = ?, notes = ? WHERE id = ?';
+    db.query(sql, [status, notes, req.params.id], (err, result) => {
+        if (err) return handleDbError(res, err, '/api/admin/appointments/:id - UPDATE');
+        res.json({ success: true });
+    });
+});
+
+app.get('/api/admin/contacts', requireAdmin, (req, res) => {
+    const sql = 'SELECT * FROM contacts ORDER BY created_at DESC';
+    db.query(sql, (err, results) => {
+        if (err) return handleDbError(res, err, '/api/admin/contacts');
+        res.json(results);
+    });
+});
+
+app.put('/api/admin/contacts/:id', requireAdmin, (req, res) => {
+    const { status } = req.body;
+    const sql = 'UPDATE contacts SET status = ? WHERE id = ?';
+    db.query(sql, [status, req.params.id], (err, result) => {
+        if (err) return handleDbError(res, err, '/api/admin/contacts/:id - UPDATE');
+        res.json({ success: true });
+    });
+});
+
+app.get('/api/admin/reviews', requireAdmin, (req, res) => {
+    const sql = 'SELECT * FROM reviews ORDER BY created_at DESC';
+    db.query(sql, (err, results) => {
+        if (err) return handleDbError(res, err, '/api/admin/reviews');
+        res.json(results);
+    });
+});
+
+app.put('/api/admin/reviews/:id', requireAdmin, (req, res) => {
+    const { approved } = req.body;
+    const sql = 'UPDATE reviews SET approved = ? WHERE id = ?';
+    db.query(sql, [approved, req.params.id], (err, result) => {
+        if (err) return handleDbError(res, err, '/api/admin/reviews/:id - UPDATE');
+        res.json({ success: true });
+    });
+});
+
+app.use((err, req, res, next) => {
+    console.error('Unhandled error in route:', err);
+    res.status(500).json({ error: 'Вътрешна грешка в сървъра' });
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
+app.listen(PORT, () => {
+    console.log(`Сървърът работи на http://localhost:${PORT}`);
+});
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+public/style.css (стилове)
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+header {
+    background: #4a4a8c;
+    color: white;
+    padding: 1rem 0;
+}
+
+header h1 {
+    margin-bottom: 1rem;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    margin-right: 1rem;
+    padding: 0.5rem;
+}
+
+nav a:hover {
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+}
+
+main {
+    padding: 2rem 0;
+}
+
+section {
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: #f9f9f9;
+    border-radius: 8px;
+}
+
+h2 {
+    color: #4a4a8c;
+    margin-bottom: 1rem;
+}
+
+#services-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.service-item {
+    background: white;
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#booking-form {
+    display: grid;
+    gap: 1rem;
+    max-width: 500px;
+}
+
+input, select, button, textarea {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: Arial, sans-serif;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+button {
+    background: #4a4a8c;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background: #3a3a7c;
+}
+
+#message, #contactMessageStatus {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.working-day {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #ddd;
+}
+
+#contact-form, #reviews-section {
+    margin-top: 2rem;
+}
+
+.review-item {
+    background: white;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.review-rating {
+    color: #ffc107;
+    font-size: 1.2rem;
+    margin: 0.5rem 0;
+}
+
+footer {
+    background: #333;
+    color: white;
+    text-align: center;
+    padding: 1rem 0;
+    margin-top: 2rem;
+}
+
+footer a {
+    color: #fff;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+.status-pending {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-confirmed {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-cancelled {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-completed {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+public/script.js (клиентски JavaScript)
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+document.addEventListener('DOMContentLoaded', function() {
+
+    fetch('/api/services')
+        .then(response => response.json())
+        .then(services => {
+            const servicesList = document.getElementById('services-list');
+            const serviceSelect = document.getElementById('service');
+            
+            if (servicesList) {
+                services.forEach(service => {
+                    const serviceItem = document.createElement('div');
+                    serviceItem.className = 'service-item';
+                    serviceItem.innerHTML = `
+                        <h3>${service.name}</h3>
+                        <p>Цена: ${service.price} лв.</p>
+                        <p>Продължителност: ${service.duration} мин.</p>
+                    `;
+                    servicesList.appendChild(serviceItem);
+                });
+            }
+            
+            if (serviceSelect) {
+                services.forEach(service => {
+                    const option = document.createElement('option');
+                    option.value = service.id;
+                    option.textContent = `${service.name} - ${service.price} лв.`;
+                    serviceSelect.appendChild(option);
+                });
+            }
+        });
+
+    fetch('/api/working-hours')
+        .then(response => response.json())
+        .then(hours => {
+            const hoursList = document.getElementById('hours-list');
+            if (hoursList) {
+                const days = ['Понеделник', 'Вторник', 'Сряда', 'Четвъртък', 'Петък', 'Събота', 'Неделя'];
+                
+                hours.forEach(day => {
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'working-day';
+                    dayElement.innerHTML = `
+                        <span>${days[day.day_of_week - 1]}</span>
+                        <span>${day.opening_time} - ${day.closing_time}</span>
+                    `;
+                    hoursList.appendChild(dayElement);
+                });
+            }
+        });
+
+    const bookingForm = document.getElementById('booking-form');
+    if (bookingForm) {
+        bookingForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const appointment = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                service_id: document.getElementById('service').value,
+                date: document.getElementById('date').value
+            };
+            
+            fetch('/api/appointments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(appointment)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const messageDiv = document.getElementById('message');
+                if (data.success) {
+                    messageDiv.textContent = 'Часът е запазен успешно!';
+                    messageDiv.className = 'success';
+                    bookingForm.reset();
+                } else {
+                    messageDiv.textContent = 'Грешка при запазване: ' + data.error;
+                    messageDiv.className = 'error';
+                }
+            })
+            .catch(error => {
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = 'Грешка при запазване на час';
+                messageDiv.className = 'error';
+            });
+        });
+    }
+
+    function loadApprovedReviews() {
+        fetch('/api/reviews/approved')
+            .then(response => response.json())
+            .then(reviews => {
+                const reviewsList = document.getElementById('reviewsList');
+                if (reviewsList) {
+                    reviewsList.innerHTML = reviews.map(review => `
+                        <div class="review-item">
+                            <h4>${review.customer_name}</h4>
+                            <div class="review-rating">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</div>
+                            <p>${review.comment}</p>
+                            <small>${new Date(review.created_at).toLocaleDateString('bg-BG')}</small>
+                        </div>
+                    `).join('');
+                }
+            })
+            .catch(error => console.error('Грешка при зареждане на отзиви:', error));
+    }
+
+    const contactForm = document.getElementById('contactForm');
+    if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const contactData = {
+                name: document.getElementById('contactName').value,
+                email: document.getElementById('contactEmail').value,
+                message: document.getElementById('contactMessage').value
+            };
+            
+            fetch('/api/contacts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById('contactMessageStatus');
+                if (data.success) {
+                    statusDiv.textContent = 'Съобщението е изпратено успешно!';
+                    statusDiv.className = 'success';
+                    contactForm.reset();
+                }
+            })
+            .catch(error => {
+                const statusDiv = document.getElementById('contactMessageStatus');
+                statusDiv.textContent = 'Грешка при изпращане';
+                statusDiv.className = 'error';
+            });
+        });
+    }
+
+    const reviewForm = document.getElementById('reviewForm');
+    if (reviewForm) {
+        reviewForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const reviewData = {
+                customer_name: document.getElementById('reviewName').value,
+                rating: parseInt(document.getElementById('reviewRating').value),
+                comment: document.getElementById('reviewComment').value
+            };
+            
+            fetch('/api/reviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reviewData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Отзивът е изпратен успешно! Ще бъде публикуван след одобрение.');
+                reviewForm.reset();
+                loadApprovedReviews();
+            })
+            .catch(error => {
+                alert('Грешка при изпращане на отзива');
+            });
+        });
+    }
+
+    loadApprovedReviews();
+});
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+public/admin/login.html
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ вход - Фризьорски салон</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        body {
+            background: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .login-container h2 {
+            text-align: center;
+            color: #4a4a8c;
+            margin-bottom: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #4a4a8c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 1rem;
+        }
+        
+        .login-btn:hover {
+            background: #3a3a7c;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            margin-top: 1rem;
+            text-align: center;
+            min-height: 20px;
+        }
+        
+        .back-link {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .back-link a {
+            color: #4a4a8c;
+            text-decoration: none;
+        }
+        
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>Административен вход</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Потребителско име:</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Парола:</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="login-btn">Вход</button>
+            <div id="errorMessage" class="error-message"></div>
+        </form>
+        <div class="back-link">
+            <a href="../index.html">← Назад към сайта</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('errorMessage');
+            
+            errorMessage.textContent = '';
+            
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    errorMessage.textContent = data.error || 'Грешка при вход';
+                }
+            } catch (error) {
+                errorMessage.textContent = 'Грешка при връзка със сървъра';
+            }
+        });
+    </script>
+</body>
+</html>
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+public/admin/dashboard.html
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ панел - Фризьорски салон</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        body {
+            background: #f5f5f5;
+            margin: 0;
+        }
+        
+        .admin-header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .admin-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .admin-nav h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: #c0392b;
+        }
+        
+        .admin-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .admin-sidebar {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .admin-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .sidebar-menu li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .sidebar-menu a {
+            display: block;
+            padding: 0.75rem;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        
+        .sidebar-menu a:hover {
+            background: #f0f0f0;
+        }
+        
+        .sidebar-menu a.active {
+            background: #4a4a8c;
+            color: white;
+        }
+        
+        .section {
+            display: none;
+        }
+        
+        .section.active {
+            display: block;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #4a4a8c;
+        }
+        
+        .stat-card h3 {
+            margin: 0 0 0.5rem 0;
+            color: #4a4a8c;
+            font-size: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        select {
+            padding: 0.25rem;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .btn {
+            padding: 0.25rem 0.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: opacity 0.3s;
+        }
+        
+        .btn:hover {
+            opacity: 0.9;
+        }
+        
+        .btn-save {
+            background: #28a745;
+            color: white;
+        }
+        
+        .recent-appointment {
+            padding: 0.5rem;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+        
+        .recent-appointment:last-child {
+            border-bottom: none;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            display: inline-block;
+        }
+        
+        .status-new { background: #cce5ff; color: #004085; }
+        .status-read { background: #d4edda; color: #155724; }
+        .status-replied { background: #d1ecf1; color: #0c5460; }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-confirmed { background: #d4edda; color: #155724; }
+        .status-cancelled { background: #f8d7da; color: #721c24; }
+        .status-completed { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="container admin-nav">
+            <h1>Админ панел - Фризьорски салон</h1>
+            <button class="logout-btn" id="logoutBtn">Изход</button>
+        </div>
+    </header>
+
+    <div class="container admin-container">
+        <aside class="admin-sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="#dashboard" class="active">Табло</a></li>
+                <li><a href="#appointments">Запазени часове</a></li>
+                <li><a href="#contacts">Контакти</a></li>
+                <li><a href="#reviews">Отзиви</a></li>
+                <li><a href="../index.html" target="_blank">Преглед на сайта</a></li>
+            </ul>
+        </aside>
+
+        <main class="admin-content">
+            <section id="dashboard" class="section active">
+                <h2>Табло</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Днес</h3>
+                        <div class="stat-number" id="todayAppointments">0</div>
+                        <p>записани часа</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Чакащи</h3>
+                        <div class="stat-number" id="pendingAppointments">0</div>
+                        <p>за потвърждение</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Нови</h3>
+                        <div class="stat-number" id="newContacts">0</div>
+                        <p>съобщения</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Отзиви</h3>
+                        <div class="stat-number" id="pendingReviews">0</div>
+                        <p>за одобрение</p>
+                    </div>
+                </div>
+                
+                <div id="recentAppointments">
+                    <h3>Последни запазвания</h3>
+                    <div id="recentAppointmentsList"></div>
+                </div>
+            </section>
+
+            <section id="appointments" class="section">
+                <h2>Запазени часове</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Име</th>
+                            <th>Телефон</th>
+                            <th>Услуга</th>
+                            <th>Дата и час</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="appointmentsTable">
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="contacts" class="section">
+                <h2>Контакти от клиенти</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Име</th>
+                            <th>Email</th>
+                            <th>Съобщение</th>
+                            <th>Дата</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contactsTable">
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="reviews" class="section">
+                <h2>Отзиви</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Име</th>
+                            <th>Оценка</th>
+                            <th>Коментар</th>
+                            <th>Дата</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reviewsTable">
+                    </tbody>
+                </table>
+            </section>
+        </main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+public/admin/admin.js
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+async function checkAuth() {
+    try {
+        const response = await fetch('/api/admin/check');
+        const data = await response.json();
+        
+        if (!data.isAdmin) {
+            window.location.href = 'login.html';
+            return false;
+        }
+        return true;
+    } catch (error) {
+        window.location.href = 'login.html';
+        return false;
+    }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/admin/logout', { method: 'POST' });
+    window.location.href = 'login.html';
+});
+
+document.querySelectorAll('.sidebar-menu a').forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        document.querySelectorAll('.sidebar-menu a').forEach(l => l.classList.remove('active'));
+        
+        link.classList.add('active');
+        
+        document.querySelectorAll('.section').forEach(section => {
+            section.classList.remove('active');
+        });
+        
+        const targetId = link.getAttribute('href').substring(1);
+        document.getElementById(targetId).classList.add('active');
+        
+        loadSectionData(targetId);
+    });
+});
+
+async function loadSectionData(section) {
+    switch(section) {
+        case 'dashboard':
+            await loadDashboard();
+            break;
+        case 'appointments':
+            await loadAppointments();
+            break;
+        case 'contacts':
+            await loadContacts();
+            break;
+        case 'reviews':
+            await loadReviews();
+            break;
+    }
+}
+
+async function loadDashboard() {
+    try {
+        const [appointmentsRes, contactsRes, reviewsRes] = await Promise.all([
+            fetch('/api/admin/appointments'),
+            fetch('/api/admin/contacts'),
+            fetch('/api/admin/reviews')
+        ]);
+        
+        const appointments = await appointmentsRes.json();
+        const contacts = await contactsRes.json();
+        const reviews = await reviewsRes.json();
+        
+        const today = new Date().toISOString().split('T')[0];
+        const todayAppointments = appointments.filter(a => 
+            a.appointment_date && a.appointment_date.startsWith(today)
+        ).length;
+        
+        document.getElementById('todayAppointments').textContent = todayAppointments;
+        document.getElementById('pendingAppointments').textContent = 
+            appointments.filter(a => a.status === 'pending').length;
+        document.getElementById('newContacts').textContent = 
+            contacts.filter(c => c.status === 'new').length;
+        document.getElementById('pendingReviews').textContent = 
+            reviews.filter(r => !r.approved).length;
+        
+        const recentAppointments = appointments.slice(0, 5);
+        const appointmentsList = document.getElementById('recentAppointmentsList');
+        if (appointmentsList) {
+            appointmentsList.innerHTML = recentAppointments.map(appointment => `
+                <div class="recent-appointment">
+                    <strong>${appointment.customer_name}</strong> - 
+                    ${appointment.service_name || 'Без услуга'} - 
+                    ${new Date(appointment.appointment_date).toLocaleString('bg-BG')} - 
+                    <span class="status-badge status-${appointment.status}">${appointment.status}</span>
+                </div>
+            `).join('');
+        }
+        
+    } catch (error) {
+        console.error('Грешка при зареждане на таблото:', error);
+    }
+}
+
+async function loadAppointments() {
+    try {
+        const response = await fetch('/api/admin/appointments');
+        const appointments = await response.json();
+        
+        const tableBody = document.getElementById('appointmentsTable');
+        if (tableBody) {
+            tableBody.innerHTML = appointments.map(appointment => `
+                <tr>
+                    <td>${appointment.customer_name}</td>
+                    <td>${appointment.customer_phone}</td>
+                    <td>${appointment.service_name || 'N/A'}</td>
+                    <td>${new Date(appointment.appointment_date).toLocaleString('bg-BG')}</td>
+                    <td>
+                        <select class="status-select" data-id="${appointment.id}" data-type="appointment">
+                            <option value="pending" ${appointment.status === 'pending' ? 'selected' : ''}>Чакащ</option>
+                            <option value="confirmed" ${appointment.status === 'confirmed' ? 'selected' : ''}>Потвърден</option>
+                            <option value="cancelled" ${appointment.status === 'cancelled' ? 'selected' : ''}>Отменен</option>
+                            <option value="completed" ${appointment.status === 'completed' ? 'selected' : ''}>Завършен</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-save" onclick="saveStatus(${appointment.id}, 'appointment')">Запази</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+    } catch (error) {
+        console.error('Грешка при зареждане на запазванията:', error);
+    }
+}
+
+async function loadContacts() {
+    try {
+        const response = await fetch('/api/admin/contacts');
+        const contacts = await response.json();
+        
+        const tableBody = document.getElementById('contactsTable');
+        if (tableBody) {
+            tableBody.innerHTML = contacts.map(contact => `
+                <tr>
+                    <td>${contact.name}</td>
+                    <td>${contact.email}</td>
+                    <td style="max-width: 300px; word-wrap: break-word;">${contact.message}</td>
+                    <td>${new Date(contact.created_at).toLocaleString('bg-BG')}</td>
+                    <td>
+                        <select class="status-select" data-id="${contact.id}" data-type="contact">
+                            <option value="new" ${contact.status === 'new' ? 'selected' : ''}>Нов</option>
+                            <option value="read" ${contact.status === 'read' ? 'selected' : ''}>Прочетен</option>
+                            <option value="replied" ${contact.status === 'replied' ? 'selected' : ''}>Отговорен</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-save" onclick="saveStatus(${contact.id}, 'contact')">Запази</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+    } catch (error) {
+        console.error('Грешка при зареждане на контактите:', error);
+    }
+}
+
+async function loadReviews() {
+    try {
+        const response = await fetch('/api/admin/reviews');
+        const reviews = await response.json();
+        
+        const tableBody = document.getElementById('reviewsTable');
+        if (tableBody) {
+            tableBody.innerHTML = reviews.map(review => `
+                <tr>
+                    <td>${review.customer_name}</td>
+                    <td>${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</td>
+                    <td style="max-width: 300px; word-wrap: break-word;">${review.comment}</td>
+                    <td>${new Date(review.created_at).toLocaleString('bg-BG')}</td>
+                    <td>
+                        <select class="status-select" data-id="${review.id}" data-type="review">
+                            <option value="0" ${!review.approved ? 'selected' : ''}>Чакащ</option>
+                            <option value="1" ${review.approved ? 'selected' : ''}>Одобрен</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-save" onclick="saveStatus(${review.id}, 'review')">Запази</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+    } catch (error) {
+        console.error('Грешка при зареждане на отзивите:', error);
+    }
+}
+
+window.saveStatus = async function(id, type) {
+    const select = document.querySelector(`.status-select[data-id="${id}"][data-type="${type}"]`);
+    const status = select.value;
+    
+    let endpoint = '';
+    let body = {};
+    
+    switch(type) {
+        case 'appointment':
+            endpoint = `/api/admin/appointments/${id}`;
+            body = { status, notes: '' };
+            break;
+        case 'contact':
+            endpoint = `/api/admin/contacts/${id}`;
+            body = { status };
+            break;
+        case 'review':
+            endpoint = `/api/admin/reviews/${id}`;
+            body = { approved: status === '1' };
+            break;
+    }
+    
+    try {
+        const response = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        if (response.ok) {
+            alert('Статусът е запазен успешно!');
+            loadSectionData(document.querySelector('.section.active').id);
+        }
+    } catch (error) {
+        console.error('Грешка при запазване на статус:', error);
+        alert('Грешка при запазване на статуса');
+    }
+}
+
+(async () => {
+    const isAuthenticated = await checkAuth();
+    if (isAuthenticated) {
+        await loadDashboard();
+    }
+})();
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+В ДИРЕКТОРИЯТА НА ПРОЕКТА
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+npm install
+npm install express-session bcrypt
+node server.js
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+REVERSE PROXY
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+
+Махнах "#" LoadModule proxy_module modules/mod_proxy.so в httpd.conf
+Добавих следното в httpd-vhosts.conf:
+
+<VirtualHost *:80>
+    ServerName localhost
+    
+    ProxyPreserveHost On
+
+    ProxyPass /phpmyadmin !
+
+    ProxyPass / http://localhost:3000/
+    ProxyPassReverse / http://localhost:3000/
+</VirtualHost>
+
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+TODO
+------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+СХЕМА/ДИАГРАМА ЗА ВИЗУАЛИЗАЦИЯ
+README.md ФАЙЛ
