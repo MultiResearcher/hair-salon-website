@@ -14,7 +14,7 @@
                 <a href="#home">Начало</a>
                 <a href="#services">Услуги</a>
                 <a href="#booking">Запази час</a>
-                <a href="#contact">Контакти</a>
+                <a href="#contact-info">Контакти</a>
             </nav>
         </div>
     </header>
@@ -49,17 +49,49 @@
             <div id="hours-list"></div>
         </section>
 
-        <section id="contact">
+        <section id="contact-info">
             <h2>Контакти</h2>
             <p>📞 Телефон: 0888 123 456</p>
             <p>📍 Адрес: ул. "Примерна" №1, София</p>
             <p>✉️ Email: info@styl-salon.com</p>
+        </section>
+
+        <section id="contact-form">
+            <h2>Свържете се с нас</h2>
+            <form id="contactForm">
+                <input type="text" id="contactName" placeholder="Вашето име" required>
+                <input type="email" id="contactEmail" placeholder="Вашият email" required>
+                <textarea id="contactMessage" placeholder="Вашето съобщение" rows="4" required></textarea>
+                <button type="submit">Изпрати съобщение</button>
+            </form>
+            <div id="contactMessageStatus"></div>
+        </section>
+
+        <section id="reviews-section">
+            <h2>Отзиви от клиенти</h2>
+            <div id="reviewsList"></div>
+            
+            <h3>Добавете ваш отзив</h3>
+            <form id="reviewForm">
+                <input type="text" id="reviewName" placeholder="Вашето име" required>
+                <select id="reviewRating" required>
+                    <option value="">Изберете оценка</option>
+                    <option value="5">★★★★★ Отлично</option>
+                    <option value="4">★★★★☆ Много добро</option>
+                    <option value="3">★★★☆☆ Добро</option>
+                    <option value="2">★★☆☆☆ Средно</option>
+                    <option value="1">★☆☆☆☆ Слабо</option>
+                </select>
+                <textarea id="reviewComment" placeholder="Вашият коментар" rows="3"></textarea>
+                <button type="submit">Изпрати отзив</button>
+            </form>
         </section>
     </main>
 
     <footer>
         <div class="container">
             <p>&copy; 2024 Фризьорски салон "Стил". Всички права запазени.</p>
+            <p><a href="/admin/login.html" style="color: #fff;">Админ вход</a></p>
         </div>
     </footer>
 
