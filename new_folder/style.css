@@ -1,0 +1,124 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+header {
+    background: #4a4a8c;
+    color: white;
+    padding: 1rem 0;
+}
+
+header h1 {
+    margin-bottom: 1rem;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    margin-right: 1rem;
+    padding: 0.5rem;
+}
+
+nav a:hover {
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+}
+
+main {
+    padding: 2rem 0;
+}
+
+section {
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: #f9f9f9;
+    border-radius: 8px;
+}
+
+h2 {
+    color: #4a4a8c;
+    margin-bottom: 1rem;
+}
+
+#services-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.service-item {
+    background: white;
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#booking-form {
+    display: grid;
+    gap: 1rem;
+    max-width: 500px;
+}
+
+input, select, button {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+button {
+    background: #4a4a8c;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #3a3a7c;
+}
+
+#message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.working-day {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #ddd;
+}
+
+footer {
+    background: #333;
+    color: white;
+    text-align: center;
+    padding: 1rem 0;
+    margin-top: 2rem;
+}

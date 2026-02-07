@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фризьорски салон "Стил"</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Фризьорски салон "Стил"</h1>
+            <nav>
+                <a href="#home">Начало</a>
+                <a href="#services">Услуги</a>
+                <a href="#booking">Запази час</a>
+                <a href="#contact">Контакти</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="home">
+            <h2>Добре дошли!</h2>
+            <p>Професионални фризьорски услуги в приятна обстановка</p>
+        </section>
+
+        <section id="services">
+            <h2>Нашите услуги</h2>
+            <div id="services-list"></div>
+        </section>
+
+        <section id="booking">
+            <h2>Запазване на час</h2>
+            <form id="booking-form">
+                <input type="text" id="name" placeholder="Вашето име" required>
+                <input type="tel" id="phone" placeholder="Телефонен номер" required>
+                <select id="service" required>
+                    <option value="">Изберете услуга</option>
+                </select>
+                <input type="datetime-local" id="date" required>
+                <button type="submit">Запази час</button>
+            </form>
+            <div id="message"></div>
+        </section>
+
+        <section id="working-hours">
+            <h2>Работно време</h2>
+            <div id="hours-list"></div>
+        </section>
+
+        <section id="contact">
+            <h2>Контакти</h2>
+            <p>📞 Телефон: 0888 123 456</p>
+            <p>📍 Адрес: ул. "Примерна" №1, София</p>
+            <p>✉️ Email: info@styl-salon.com</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Фризьорски салон "Стил". Всички права запазени.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
