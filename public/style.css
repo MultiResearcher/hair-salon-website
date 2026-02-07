@@ -72,11 +72,17 @@ h2 {
     max-width: 500px;
 }
 
-input, select, button {
+input, select, button, textarea {
     padding: 0.75rem;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 1rem;
+    font-family: Arial, sans-serif;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
 }
 
 button {
@@ -84,13 +90,14 @@ button {
     color: white;
     border: none;
     cursor: pointer;
+    transition: background 0.3s;
 }
 
 button:hover {
     background: #3a3a7c;
 }
 
-#message {
+#message, #contactMessageStatus {
     margin-top: 1rem;
     padding: 1rem;
     border-radius: 4px;
@@ -115,10 +122,69 @@ button:hover {
     border-bottom: 1px solid #ddd;
 }
 
+#contact-form, #reviews-section {
+    margin-top: 2rem;
+}
+
+.review-item {
+    background: white;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.review-rating {
+    color: #ffc107;
+    font-size: 1.2rem;
+    margin: 0.5rem 0;
+}
+
 footer {
     background: #333;
     color: white;
     text-align: center;
     padding: 1rem 0;
     margin-top: 2rem;
+}
+
+footer a {
+    color: #fff;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+.status-pending {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-confirmed {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-cancelled {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.status-completed {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
 }
